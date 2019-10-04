@@ -18,6 +18,28 @@ class DB {
           return reject(err)
         }
         return resolve(data)
+        // return resolve(data.Item)
+        // JSON.stringify(data, undefined, 2)
+      })
+    })
+  }
+
+  write(ID, data, table) {
+    return new Promise((resolve, reject) => {
+      if (typeof ID !== 'string') throw `the id must be a string and not ${ID}`
+      if (!data) throw "data is needed"
+      if (!table) throw 'table name is needed'
+
+      const params = { TableName: table, Item: { ...data, ID: ID } }
+
+      documentClient.put(params, (err, result) => {
+        if (err) {
+          console.log("Err in writeForCall writing messages to dynamo:", err)
+          console.log(params)
+          return reject(err)
+        }
+        console.log('wrote data to table ', table)
+        return resolve({ ...result.Attributes, ...params.Item })
       })
     })
   }
@@ -33,7 +55,6 @@ exports.handler = async (event, context) => {
   if (from !== 'EUR') return respond(400, 'free plan allows only conversion from EUR')
 
   // call fixer API
-  // todo make the access key a part of the env vars
   const fixerReply = await fetch('http://data.fixer.io/api/latest?access_key=11e71290875f5b9fb0c096eaa6735c93&format=1').catch(e => e)
   console.log('fixer says:', typeof fixerReply, fixerReply)
 
@@ -52,6 +73,16 @@ exports.handler = async (event, context) => {
   const Dynamo = new DB()
   const dynamoData = await Dynamo.get('id', 'conversionStats', 'currencyConversionStats').catch(e => e)
   console.log('dynamo data', dynamoData)
+
+  if (dynamoData && dynamoData.Item) {
+    dynamoData.Item.conversionCount++
+    dynamoData.Item.conversionAmountInUsd += rates.rates['USD'] * parsedAmount
+    if (!dynamoData.Item.destinationCurrencies[to]) dynamoData.Item.destinationCurrencies[to] = 0
+    dynamoData.Item.destinationCurrencies[to]++
+  }
+  console.log('after update', dynamoData)
+  const writeResult = await Dynamo.write('conversionStats', dynamoData, 'currencyConversionStats')
+  console.log(writeResult)
 
   // conversionCount: 2,
   // conversionAmountInUsd: 350,
