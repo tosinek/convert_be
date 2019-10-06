@@ -1,3 +1,4 @@
+// I know the resource name is not right anymore :-)
 const http = require('http')
 var AWS = require('aws-sdk')
 var documentClient = new AWS.DynamoDB.DocumentClient({ region: 'eu-central-1' })
@@ -68,52 +69,41 @@ exports.handler = async (event, context) => {
   console.log('parsedAmount', parsedAmount)
   console.log('exchRate', exchRate)
 
+
+  // const req = {
+  //     FunctionName: 'dynamoDBfetcher',
+  //     // Payload: JSON.stringify({ message: 'ahppp'}) // todo fix payload
+  // }
+  // const dynamoReply = await Lambda.invoke(req).promise()
+
+
   // store data to DynamoDB
   // const DB = require('./dynamo')
   const Dynamo = new DB()
   const dynamoData = await Dynamo.get('id', 'conversionStats', 'currencyConversionStats').catch(e => e)
-  console.log('dynamo data', dynamoData)
+  console.log('dynamo data', dynamoData && dynamoData.Item)
 
   if (dynamoData && dynamoData.Item) {
     dynamoData.Item.conversionCount++
     dynamoData.Item.conversionAmountInUsd += rates.rates['USD'] * parsedAmount
     if (!dynamoData.Item.destinationCurrencies[to]) dynamoData.Item.destinationCurrencies[to] = 0
     dynamoData.Item.destinationCurrencies[to]++
+    console.log('after update', dynamoData.Item)
+
+    const writeResult = await Dynamo.write('conversionStats', dynamoData.Item, 'currencyConversionStats')
+    console.log(writeResult)
   }
-  console.log('after update', dynamoData)
-  const writeResult = await Dynamo.write('conversionStats', dynamoData, 'currencyConversionStats')
-  console.log(writeResult)
-
-  // conversionCount: 2,
-  // conversionAmountInUsd: 350,
-  // destinationCurrencies: {
-  //   CZK: 2,
-  //   EUR: 5,
-  // }
-
 
   return respond(200, result)
 }
 
-const fetch = (url) => {
-  return new Promise(function (resolve, reject) {
-    http.get(url, (res) => {
+const fetch = url => {
+  return new Promise((resolve, reject) => {
+    http.get(url, res => {
       let str = ''
-      res.on('data', chunk => {
-        str += chunk
-      })
-
-      res.on('end', function () {
-        console.log('data', str)
-        resolve(str)
-
-
-      })
-
-      res.on('error', (err) => {
-        console.log('errrorrr ftech')
-        reject(err)
-      })
+      res.on('data', chunk => { str += chunk })
+      res.on('end', () => { resolve(str) })
+      res.on('error', err => { reject(err) })
     })
   })
 }
